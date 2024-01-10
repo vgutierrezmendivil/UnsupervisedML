@@ -1,0 +1,530 @@
+---
+title: "Modelos Jerárquicos - Victoria Gutierrez"
+output:
+  html_document: default
+  pdf_document: default
+date: "2023-11-11"
+---
+
+Repaso teórico - Métodos Jerárquicos
+
+Un método de cluster jerárquico sobre un conjunto de datos consiste en una serie de particiones anidadas del conjunto. A grandes rasgos hay dos métodos: aglomerativos y divisivos.
+
+Los métodos aglomerativos parten de una partición inicial (P0) en la que cada observación es un cluster, luego se buscan los dos clusters que estén más cercanos y se juntan formando una nueva partición (P1). Esto se repite hasta que quede un solo cluster con todas las observaciones, en la partición final (Pn). Para construir estos algoritmos es necesario una disimilaridad como criterio para aglomerar clusters. Hay diferentes algoritmos aglomerativos y en este trabajo usaremos dos:
+
+- Single linkeage: la disimimlaridad que emplea este método es la mínima distancia entre observaciones de dos clusters diferentes
+- Complete linkeage: la disimimlaridad que emplea este método es la máxima distancia entre observaciones de dos clusters diferentes
+
+En cada paso se registra la distancia (L) correspondiente a los clusters que se unieron. Luego se construye un dendograma, que es un diagrama de árbol que muestra los grupos de observaciones que se forman en cada paso y la distancia L. Para elegir la partición conveniente, el dendograma se ´corta´ a ojo, típicamente donde la diferencia entre dos Ls sucesivas sea mayor.
+
+Los métodos divisivos consideran a todo el conjunto de datos dentro del mismo cluster en la partición inicial (P0) y realizan una bisección en dos clusters para llegar a P1. En la partición final (Pn) cada observación individual es un cluster. Para realizar las bisecciones, se quita una observación del cluster y se mide la distancia a ese mismo cluster pero sin la observación que fue removida, luego se separa y va al otro cluster la observación cuya distancia es máxima. Esto se repite hasta que, para cada observación del cluster 1, la distancia a ese cluster sea menor que la distancia de esa observación al cluster 2. Para decidir con que cluster se procede a hacer la próxima bisección se mide el diámetro de todos los clusters y se divide el de mayor diámetro (el diámetro de un cluster es la máxima distancia entre dos observaciones del mismo cluster)
+
+
+EJERCICIO 2
+
+En este ejercicio se trabajará con el conjunto de datos ´US Arrest´de la libreria cluster. Este conjunto de datos contiene estadísticas de arrestos por cada 100,000 habitantes por asalto, asesinato y violación en cada uno de los 50 estados de EE. UU. en 1973. También se da el porcentaje de la población que vive en áreas urbanas.
+
+```{r, echo=FALSE, message=FALSE}
+library(cluster)
+library(dendextend)
+library(ggplot2)
+library(factoextra)
+library(repr)
+library(maps)
+library(usmap)
+```
+
+```{r, echo=FALSE, message=FALSE}
+data("USArrests")
+df = USArrests
+head(df, n=7)
+
+```
+
+Murder: arrestos por asesinatos por cada 100,000 hab.
+
+Assault: arrestos por asaltos por cada 100,000 hab.
+
+UrbanPop: porcentaje de población urbana.
+
+Rape: arrestos por violacón por cada 100,000 hab.
+
+Se utilizarán algoritmos jerárquicos aglomerativos para buscar agrupar los estados de este conjunto de datos que tengan comportamientos similares. Estos algortimos serán:
+
+ 1- Single linkeage teniendo en cuenta todas las variables
+ 2- Complete linkeage teniendo en cuenta todas las variables
+ 3- Complete linkeage quitando una variable (UrbanPop)
+
+
+DENDOGRAMA DE US ARREST UTILIZANDO EL MÉTODO ´SINGLE´
+
+```{r, echo=FALSE, message=FALSE}
+library(factoextra)
+
+df_stand = scale(df) # estandarizamos las variables
+d_stand = dist(df_stand)
+
+arrest_hclust2 = hclust(d_stand, method="single")
+cut_tree_result <- cutree(arrest_hclust2, k = 2)
+
+
+plot(arrest_hclust2, hang = -1, cex = 0.8, main = "Dendrograma con Single Linkage")
+
+# Agrega colores a los clusters
+rect.hclust(arrest_hclust2, k = 2, border = 2:3)
+```
+
+Observando este dendograma, el corte más conveniente pareciera ser el indicado en el gráfico. Sin embargo, esto lo que hace es generar dos clusters: uno compuesto únicamente por el estado Alaska y otro cluster conformado por el resto de los estados. Desde el punto de vista del análisis esto no nos da mucha información, ya que solo separa un estado del resto. 
+
+DENDOGRAMA DE US ARREST UTILIZANDO EL MÉTODO ´COMPLETE´
+
+```{r, echo=FALSE, message=FALSE}
+
+arrest_hclust3 = hclust(d_stand, method="complete")
+
+cut_tree_comp_2 <- cutree(arrest_hclust3, k = 2)
+plot(arrest_hclust3, hang = -1, cex = 0.8, main = "Dendrograma con Complete Linkage")
+rect.hclust(arrest_hclust3, k = 2, border=2:3)
+
+cut_tree_comp_3 <- cutree(arrest_hclust3, k = 4)
+plot(arrest_hclust3, hang = -1, cex = 0.8, main = "Dendrograma con Complete Linkage")
+rect.hclust(arrest_hclust3, k = 4, border = 2:3)
+
+```
+
+Con este algortimo vemos que tenemos más opciones de corte. Una posible es hacerlo debajo de 6, obteniendo dos clusters, y otra cerca de 4, obteniendo 4. Ambas particiones nos permiten hacer un análisis, ya que en ambos casos tendríamos suficiente cantidad de observaciones en cada cluster (31 y 19 si hacemos 2 clusters y 10, 21, 11 y 8 si hacemos 4).
+
+```{r, echo=FALSE, message=FALSE}
+sil_index_arrest_1 <- silhouette(cut_tree_comp_2, dist = d_stand)
+
+fviz_silhouette(sil_index_arrest_1)
+
+sil_index_arrest_1
+```
+```{r, echo=FALSE, message=FALSE}
+sil_index_arrest_2 <- silhouette(cut_tree_comp_3, dist = d_stand)
+
+fviz_silhouette(sil_index_arrest_2)
+
+sil_index_arrest_2
+```
+
+
+Como se puede ver, con k=4 el score de silhouette baja de 0,4 a 0,32 con respecto al caso donde k=2. Con 4 clusters los estados con silhouette negativo, es decir, que están mas relacionados con estados de otros clusters, son:
+
+2 - Alaska (1)
+3 - Arizona (2)
+11 - Hawaii (3)
+16 - Kansas (3)
+21 - Massachusetts (3)
+22 - Michigan (2)
+25 - Missouri (3)
+38 - Pennsylvania (3)
+42 - Tennessee (1)
+
+Entre () indico la etiqueta asignada
+
+A continuación observamos las etiquetas de todos los estado eligiendo 4 clusters, es decir, k=4.
+
+
+```{r, echo=FALSE, message=FALSE}
+hclust3_clusters = cutree(arrest_hclust3, k=4)
+hclust3_clusters
+```
+
+
+Comparamos los dendogramas hechos con el método single y el complete
+
+```{r, echo=FALSE, message=FALSE}
+# Correlación entre los árboles
+dend1=as.dendrogram(arrest_hclust2)
+dend2=as.dendrogram(arrest_hclust3)
+dend_list = dendlist(dend1, dend2) 
+
+# Cophenetic correlation
+cor.dendlist(dend_list, method = "cophenetic")
+```
+
+Vemos que la correlación cofenética entre ambos árboles es de 0,5 lo que indica que estos arboles están poco correlacionados. 
+
+DENDOGRAMA DE US ARREST SIN LA VARIABLE UrbanPop UTILIZANDO EL MÉTODO ´COMPLETE´
+
+```{r, echo=FALSE, message=FALSE}
+df_sinup=df[-3]
+df_sinup
+```
+```{r, echo=FALSE, message=FALSE}
+df_stand2 = scale(df_sinup) # estandarizamos
+
+d_stand2 = dist(df_stand2)
+arrest_hclust4 = hclust(d_stand2, method="complete")
+
+cut_tree_sinup_2 <- cutree(arrest_hclust4, k = 2)
+plot(arrest_hclust3, hang = -1, cex = 0.8, main = "Dendrograma con Complete Linkage sin la variable UrbanPop")
+rect.hclust(arrest_hclust4, k = 2, border = 2:3)
+
+cut_tree_sinup_3 <- cutree(arrest_hclust4, k = 4)
+plot(arrest_hclust3, hang = -1, cex = 0.8, main = "Dendrograma con Complete Linkage sin la variable UrbanPop")
+rect.hclust(arrest_hclust4, k = 4, border = 2:3)
+```
+
+Al quitar la variable UrbanPop (porcentaje de población urbana) vemos que el corte más evidente es cerca de 4, obteniendo 2 clusters, aunque también podría hacerse cerca de 2,5 y obtener 4 clusters.
+
+```{r, echo=FALSE, message=FALSE}
+sil_index_arrest_su1 <- silhouette(cut_tree_sinup_2, dist = d_stand2)
+
+fviz_silhouette(sil_index_arrest_su1)
+
+sil_index_arrest_su1
+```
+```{r, echo=FALSE, message=FALSE}
+sil_index_arrest_su2 <- silhouette(cut_tree_sinup_3, dist = d_stand2)
+
+fviz_silhouette(sil_index_arrest_su2)
+
+sil_index_arrest_su2
+```
+
+En este caso los indices de silhouette tambien son mejores cuando armamos dos clusters (0,52, vs 0,26 con cuatro clusters). Los estados con indice de silhouette negativo son los siguientes, en mayúscula se indican los estados que también tienen índice de silhouette negativo en el análisis con todas las variables:
+
+3 - ARIZONA (1)
+13 - Illinois (2)
+16 - KANSAS (4)
+21 - MASSACHUSETTS (4)
+22 - MICHIGAN (1)
+25 - MISSOURI (2)
+31 - New Mexico (1)
+32 - New York (2)
+39 - Rhode Island (3)
+42 - TENNESSEE (2)
+43 - Texas (2)
+
+
+
+A continuación observamos las etiquetas de cada estado eligiendo 4 clusters, es decir, k=4.
+
+```{r, echo=FALSE, message=FALSE}
+hclust4_clusters = cutree(arrest_hclust4, k=4)
+hclust4_clusters
+```
+
+Elegimos k=4 para ambos dendogramas y los comparamos.
+
+Correlación cofenética:
+
+```{r, echo=FALSE, message=FALSE}
+# Correlación entre los árboles
+dend3=as.dendrogram(arrest_hclust4)
+dend_list = dendlist(dend2, dend3) 
+
+# Cophenetic correlation
+cor.dendlist(dend_list, method = "cophenetic")
+
+```
+
+A pesar de haber quitado una variable del análisis para uno de los árboles, estos dos dendogramas están más relacionados que el del método single con el del método complete, teniendo en cuenta todas las variables en ambos casos.
+
+Boxplots k=2
+
+```{r, echo=FALSE, message=FALSE}
+library(reshape2)
+
+clustered_data1= data.frame(df_stand, Cluster = cut_tree_comp_2)
+melted_data1= melt(clustered_data1, id.vars = "Cluster")
+
+# Crear un gráfico de boxplots para cada variable
+ggplot(melted_data1, aes(x = variable, y = value, fill = factor(Cluster))) +
+  geom_boxplot() +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Boxplots de Variables por Cluster con UrbanPop") +
+  theme(legend.position = "top")
+
+clustered_data2= data.frame(df_stand2, Cluster = cut_tree_sinup_2)
+melted_data2= melt(clustered_data2, id.vars = "Cluster")
+
+# Crear un gráfico de boxplots para cada variable
+ggplot(melted_data2, aes(x = variable, y = value, fill = factor(Cluster))) +
+  geom_boxplot() +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Boxplots de Variables por Cluster sin UrbanPop") +
+  theme(legend.position = "top")
+```
+
+Boxplots k=4
+
+```{r, echo=FALSE, message=FALSE}
+library(reshape2)
+
+clustered_data3= data.frame(df_stand, Cluster = hclust3_clusters)
+melted_data3= melt(clustered_data3, id.vars = "Cluster")
+
+# Crear un gráfico de boxplots para cada variable
+ggplot(melted_data3, aes(x = variable, y = value, fill = factor(Cluster))) +
+  geom_boxplot() +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Boxplots de Variables por Cluster con UrbanPop") +
+  theme(legend.position = "top")
+
+clustered_data4= data.frame(df_stand2, Cluster = hclust4_clusters)
+melted_data4= melt(clustered_data4, id.vars = "Cluster")
+
+# Crear un gráfico de boxplots para cada variable
+ggplot(melted_data4, aes(x = variable, y = value, fill = factor(Cluster))) +
+  geom_boxplot() +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Boxplots de Variables por Cluster sin UrbanPop") +
+  theme(legend.position = "top")
+```
+
+Vemos que para k=2 no hay una gran diferencia entre la media de la población urbana en los estados de cada cluster. En ambos casos, tanto para el análisis con todas las variables como para el análisis sin UrbanPop, se clusteriza a los estados entre 'peligrosos' y 'tranquilos', es decir, estados con altos indices de asalto, asesinato y violación y estados con bajos valores para estos índices. 
+
+En el caso en que k=4 la división es más interesante desde el lado de la interpretabilidad. A grandes rasgos, en el análisis completo, se divide a los estados entre rurales y urbanos y entre peligrosos y tranquilos. En el análisis sin UrbanPop la clusterización se hace, como es de esperar, según los índices delictivos y van de más a menos peligrosos.
+
+Analizamos los clusters para el caso con todas las variables y k=4:
+
+- cluster 1: estados rurales con altos índices de asesinatos y asaltos y un índice mediano de violaciones (algo me dice que en el campo no se reportan las violaciones)
+- cluster 2: estados urbanos con altos índices de asesinatos, asaltos y violaciones (ciudad gótica)
+- cluster 3: estados urbanos con bajos índices de asesinatos , asaltos y violaciones
+- cluster 4: estados rurales con bajos indices de asesinatos, asaltos y violaciones (heidi)
+
+Analizando los clusters del segundo dendograma (sin UrbanPop) vemos que, en general, se agrupa a los estados según sus índices de delitos, yendo desde los índices ás altos para el cluster 1, hasta los índices más bajos para el cluster 4. La única salvedad es que el la media del índice de violaciones para el cluster 1 es levemente inferior a la del cluster 2.
+
+MAPAS
+
+```{r, echo=FALSE, message=FALSE}
+# Cargar bibliotecas
+library(maps)
+library(ggplot2)
+library(reshape2)
+
+# Datos de US Arrests
+data("USArrests")
+df <- USArrests
+
+# Convertir los nombres de los estados a minúscula
+df$Region <- tolower(rownames(df))
+
+# Estandarizar solo las variables numéricas
+num_cols <- sapply(df, is.numeric)
+df_stand <- df
+df_stand[, num_cols] <- scale(df_stand[, num_cols])
+
+# Calcular la matriz de distancias
+d_stand <- dist(df_stand[, num_cols])
+
+# Realizar el agrupamiento jerárquico con método complete
+arrest_hclust3 <- hclust(d_stand, method = "complete")
+
+# Realizar el corte para k=4
+cut_tree_comp_3 <- cutree(arrest_hclust3, k = 4)
+
+# Agregar las etiquetas de los clusters al dataframe
+df$Cluster <- as.factor(cut_tree_comp_3)
+
+# Obtener datos geográficos más detallados de los estados
+us_states_detail <- map_data("state", region = c("alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming"))
+
+# Fusionar los datos geográficos con los datos de los clusters
+map_data_with_clusters <- merge(us_states_detail, df, by.x = "region", by.y = "Region", all.x = TRUE)
+
+# Graficar el mapa con la paleta de colores de los boxplots con UrbanPop
+ggplot(map_data_with_clusters, aes(x = long, y = lat, group = group, fill = Cluster)) +
+  geom_polygon(color = "black", size = 0.5) +
+  scale_fill_manual(values = scales::hue_pal()(n = nlevels(factor(df$Cluster))), na.value = "gray") +
+  labs(title = "Complete linkeage con UrbanPop") +
+  theme_void()
+```
+
+```{r, echo=FALSE, message=FALSE}
+# Cargar bibliotecas
+library(maps)
+library(ggplot2)
+library(reshape2)
+
+# Datos de US Arrests
+data("USArrests")
+df <- USArrests
+
+# Excluir la variable UrbanPop
+df <- df[, -3]
+
+# Convertir los nombres de los estados a minúscula
+df$Region <- tolower(rownames(df))
+
+# Estandarizar solo las variables numéricas
+num_cols <- sapply(df, is.numeric)
+df_stand <- df
+df_stand[, num_cols] <- scale(df_stand[, num_cols])
+
+# Calcular la matriz de distancias
+d_stand <- dist(df_stand[, num_cols])
+
+# Realizar el agrupamiento jerárquico con método complete
+arrest_hclust3 <- hclust(d_stand, method = "complete")
+
+# Realizar el corte para k=4
+cut_tree_comp_3 <- cutree(arrest_hclust3, k = 4)
+
+# Agregar las etiquetas de los clusters al dataframe
+df$Cluster <- as.factor(cut_tree_comp_3)
+
+# Obtener datos geográficos más detallados de los estados
+us_states_detail <- map_data("state", region = c("alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada", "new hampshire", "new jersey", "new mexico", "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas", "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming"))
+
+# Fusionar los datos geográficos con los datos de los clusters
+map_data_with_clusters <- merge(us_states_detail, df, by.x = "region", by.y = "Region", all.x = TRUE)
+
+# Graficar el mapa con la paleta de colores de los boxplots sin UrbanPop
+ggplot(map_data_with_clusters, aes(x = long, y = lat, group = group, fill = Cluster)) +
+  geom_polygon(color = "black", size = 0.5) +
+  scale_fill_manual(values = scales::hue_pal()(n = nlevels(factor(df$Cluster))), na.value = "gray") +
+  labs(title = "Complete linkeage sin UrbanPop") +
+  theme_void()
+```
+
+Observando los mapas se ve que hay 15 estados que difieren de un caso a otro, de los cuales 10 (en mayuscula) son los que tenían silhouette negativo:
+
+ - ALASKA
+ - ARIZONA
+ - Connecticut
+ - Florida
+ - HAWAII
+ - KANSAS
+ - Maryland
+ - MASSACHUSETTS
+ - MICHIGAN
+ - Minnesota
+ - MISSOURI
+ - NEW MEXICO
+ - PENNSYLVANIA
+ - TENNESSEE
+ - Wisconsin
+
+
+Yo eligiría los resultados que arroja el análisis con todas las variables y k=4 ya que hay 4 grupos claros y se puede simplificar la lectura pensando en 2 variables:  
+
+- % de población urbana
+- seguridad 
+
+
+EJERCICIO 3
+
+En este ejercicio trabajaremos con el conjunto de datos Mall Customer, el cual consta de datos de 200 clientes de un mall, obtenidos a traves de la tarjeta de membresía. 
+
+```{r, echo=FALSE, message=FALSE}
+customer= read.csv('Mall_Customers.csv', stringsAsFactors = T)[-1]
+head(customer)
+```
+
+
+Variables
+
+ - Gender: género del cliente
+ - Age: edad
+ - Annual Income: ingresos anuales del cliente medidos en miles de dólares
+ - Spending score: es un score definido por el mall basado en comportamiento del cliente y datos de sus compras. Sus valores están entre 0 y 100
+En el conjunto de datos hay otra variable, CustomerID, que la eliminé antes de comenzar el análisis porque no es informativa
+
+Conjunto de datos estandarizado:
+
+```{r, echo=FALSE, message=FALSE}
+num_cols <- sapply(customer, is.numeric)
+customer[num_cols] <- scale(customer[num_cols])
+head(customer)
+
+```
+
+
+DENDOGRAMA UTILIZANDO EL METODO DIVISIVO DIANA
+
+```{r, echo=FALSE, message=FALSE}
+customer_hclust= diana(customer)
+ 
+
+```
+```{r, echo=FALSE, message=FALSE}
+pltree(customer_hclust, cex = 0.6, hang = -1, main = "Dendrograma diana k=2")
+rect.hclust(customer_hclust, k = 2, border = 2:10)
+```
+```{r, echo=FALSE, message=FALSE}
+cust_clusters_1= cutree(customer_hclust, k=2)
+cust_clusters_1
+```
+
+
+```{r, echo=FALSE, message=FALSE}
+pltree(customer_hclust, cex = 0.6, hang = -1, main = "Dendrograma diana k=5")
+rect.hclust(customer_hclust, k = 5, border = 2:10)
+```
+
+```{r, echo=FALSE, message=FALSE}
+cust_clusters_2= cutree(customer_hclust, k=5)
+cust_clusters_2
+```
+
+Al observar el dendograma los cortes evidentes son para k=2 y k=5, las alturas en ambos casos son similares.
+Analizo ambas variantes
+
+Análisis de clusters con k=2
+
+```{r, echo=FALSE, message=FALSE}
+library(reshape2)
+
+clustered_data1= data.frame(customer[,-1], Cluster = cust_clusters_1)
+melted_data1= melt(clustered_data1, id.vars = "Cluster")
+
+# Crear un gráfico de boxplots para cada variable
+ggplot(melted_data1, aes(x = variable, y = value, fill = factor(Cluster))) +
+  geom_boxplot() +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Boxplots de Variables por Cluster") +
+  theme(legend.position = "top")
+
+round(table(customer$Gender, cust_clusters_1)/nrow(customer),2)
+
+```
+
+```{r, echo=FALSE, message=FALSE}
+sil_index_cust_1 <- silhouette(cust_clusters_1, dist = dist(customer))
+
+fviz_silhouette(sil_index_cust_1)
+```
+
+En este caso se agrupa a los clientes por edad y por score pero los clientes de ambos clusters tienen, en promedio, ingresos anuales similares. Vemos que los grupos son homogéneos y el índice de silhouette de 0,34. Pensando en una campaña de marketing podría interesarnos el grupo de personas con score alto que, en este caso, son jóvenes.
+
+Análisis de clusters con k=5
+
+```{r, echo=FALSE, message=FALSE}
+library(reshape2)
+
+clustered_data2= data.frame(customer[,-1], Cluster = cust_clusters_2)
+melted_data2= melt(clustered_data2, id.vars = "Cluster")
+
+# Crear un gráfico de boxplots para cada variable
+ggplot(melted_data2, aes(x = variable, y = value, fill = factor(Cluster))) +
+  geom_boxplot() +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Boxplots de Variables por Cluster") +
+  theme(legend.position = "top")
+
+round(table(customer$Gender, cust_clusters_2)/nrow(customer),2)
+```
+
+```{r, echo=FALSE, message=FALSE}
+sil_index_cust_2 <- silhouette(cust_clusters_2, dist = dist(customer))
+
+fviz_silhouette(sil_index_cust_2)
+```
+
+Este análisis es más rico en términos de interpretabilidad, ya que entra en juego la variable Annual Income. El índice de silhouette aumenta a 0,42, a pesar de que hay algunos pocos clientes con silhouette negativo, es decir, que guardan más similitudes con clientes de otros clusters. 
+Al elegir más clusters, son más específicas las caracterísicas de cada grupo y esto puede ser particularmente útil para una campaña de marketing. En este caso los grupos más interesantes son:
+
+ - grupo 1: jóvenes con ingresos anuales bajos y score intermedio/alto. Hay mayoría de mujeres (60%)
+ - grupo 5: jóvenes más adultos con ingresos anuales altos y score alto. La cantidad de hombres y mujeres es pareja
+ 
+Es intesante notar que aunque los ingresos anuales de los clientes del grupo 1 sean bajos, puede ser que se trate de personas que todavía no trabajan y obtengan dinero de sus padres. 
+
+
+
+
+
